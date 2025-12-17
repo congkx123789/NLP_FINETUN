@@ -1,0 +1,34 @@
+# Large directories - DO NOT PUSH
+llama.cpp/
+final_models/
+models/
+unsloth_compiled_cache/
+data/
+saves/
+results/
+Test/
+
+# Large files
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp

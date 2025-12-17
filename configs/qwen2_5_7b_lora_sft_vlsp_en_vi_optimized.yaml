@@ -1,0 +1,54 @@
+### model
+model_name_or_path: /home/alida/Documents/Cursor/NLP_fine_tun/models/Qwen2.5-7B
+trust_remote_code: true
+quantization_bit: 4  # 4-bit quantization để tiết kiệm VRAM (giảm từ ~14GB xuống ~7GB)
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 8  # Giảm từ 16 xuống 8 để tăng tốc (đủ tốt cho dịch thuật)
+lora_alpha: 16  # Thường = 2 * rank
+lora_target: all
+lora_dropout: 0.1  
+
+### dataset
+dataset: vlsp_medical_en_vi_train
+eval_dataset: vlsp_medical_en_vi_val
+template: qwen
+cutoff_len: 256  # Giảm xuống 256 để tiết kiệm VRAM (câu dịch y tế thường ngắn)
+packing: true  # ⚡ QUAN TRỌNG: Gộp nhiều câu ngắn thành chuỗi dài, tăng tốc 2-3x
+overwrite_cache: true
+preprocessing_num_workers: 16
+dataloader_num_workers: 8  # Tăng lên 8 để CPU load data nhanh hơn
+dataloader_pin_memory: true  # Tăng tốc transfer CPU->GPU
+
+### output
+output_dir: saves/qwen2_5-7b/lora/sft_vlsp_en_vi_optimized
+logging_steps: 10
+save_steps: 1000
+plot_loss: true
+overwrite_output_dir: true
+save_only_model: false
+report_to: none
+
+### train
+per_device_train_batch_size: 1  # Giảm xuống 1 để tránh OOM (16GB VRAM với Qwen 7B)
+gradient_accumulation_steps: 32  # Tăng lên 32 để bù lại batch size nhỏ hơn (effective batch = 32)
+learning_rate: 1.0e-4  # Giảm LR vì batch size nhỏ hơn
+num_train_epochs: 1.0  # Chỉ train 1 epoch
+lr_scheduler_type: linear  # Linear nhanh hơn cosine
+warmup_ratio: 0.03  # Giảm warmup
+bf16: true  # Bắt buộc cho RTX 5060 Ti
+ddp_timeout: 180000000
+resume_from_checkpoint: null
+optim: adamw_8bit  # Tiết kiệm VRAM, tăng batch size được
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+### eval
+do_eval: true
+per_device_eval_batch_size: 8
+eval_strategy: steps
+eval_steps: 500
+
