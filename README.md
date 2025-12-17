@@ -1,24 +1,19 @@
 ## Qwen2.5-7B Medical MT (EN–VI / VI–EN) – Unsloth + FlashAttention2
 
-Dự án này fine-tune **Qwen2.5-7B** cho dịch máy y tế Anh–Việt / Việt–Anh trên dữ liệu VLSP (constrained), tối ưu cho **RTX 5060 Ti 16GB** với **Unsloth + QLoRA 4-bit + FlashAttention 2**.  
-Bạn đã có:
-- Bản **adapter 4-bit đã fine-tune**: `saves/qwen2_5-7b/unsloth/mixed_maxsteps10000_fa2`
-- Bản **full 16-bit đã merge**: `final_models/Qwen2.5-7B-Medical-Full-Bin`
-- Bản **GGUF** cho Ollama / llama.cpp: `Qwen2.5-7B.Q4_K_M.gguf`
+Dự án này fine-tune **Qwen2.5-7B** cho dịch máy y tế Anh–Việt / Việt–Anh trên dữ liệu VLSP (constrained), tối ưu với **Unsloth + QLoRA 4-bit + FlashAttention 2**.
 
 ---
 
 ## 1. Chuẩn bị môi trường
 
 ```bash
-cd /home/alida/Documents/Cursor/NLP_fine_tun
 export PATH="$HOME/miniconda3/bin:$PATH"
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate unsloth_nightly
 ```
 
 Môi trường này đã cài:
-- `torch` nightly + CUDA 12.8 (cu128)
+- `torch` nightly + CUDA
 - `unsloth` (colab-new) + FA2
 - `trl`, `peft`, `bitsandbytes`, `sacrebleu`, v.v.
 
@@ -60,10 +55,9 @@ Format mỗi dòng (Alpaca-style đơn giản):
 
 Script chính: `scripts/train_unsloth.py`
 
-### 3.1. Train mixed (EN–VI + VI–EN) 10.000 steps
+### 3.1. Train mixed (EN–VI + VI–EN)
 
 ```bash
-cd /home/alida/Documents/Cursor/NLP_fine_tun
 python scripts/train_unsloth.py \
   --direction mixed \
   --batch-size 4 \
@@ -76,12 +70,9 @@ python scripts/train_unsloth.py \
 Các thiết lập chính bên trong:
 - **QLoRA 4-bit** (`load_in_4bit=True`)
 - **bf16 = True**, **fp16 = False**
-- **FlashAttention2 = True** (nếu GPU hỗ trợ – RTX 5060 Ti OK)
+- **FlashAttention2 = True** (nếu GPU hỗ trợ)
 - **packing = True** trong `SFTTrainer` (gộp nhiều câu ngắn → tăng tốc)
 - `per_device_train_batch_size=4`, `gradient_accumulation_steps=4`
-
-Log training được lưu trong:
-- `training_mixed_maxsteps10000.log` (nếu dùng `tee`)
 
 ---
 
@@ -90,14 +81,9 @@ Log training được lưu trong:
 Script: `scripts/merge_all.py`
 
 Chức năng:
-1. Load adapter Unsloth: `saves/qwen2_5-7b/unsloth/mixed_maxsteps10000_fa2`
-2. `save_pretrained_merged(...)` → 16-bit safetensors:
-   - `final_models/Qwen2.5-7B-Medical-Full-Bin`
-3. `save_pretrained_gguf(...)` → GGUF (ví dụ `q4_k_m`):
-   - `final_models/Qwen2.5-7B-Medical-GGUF`
-
-Sau đó bạn đã copy/đổi tên 1 bản GGUF ra ngoài:
-- `Qwen2.5-7B.Q4_K_M.gguf`
+1. Load adapter Unsloth
+2. `save_pretrained_merged(...)` → 16-bit safetensors
+3. `save_pretrained_gguf(...)` → GGUF (ví dụ `q4_k_m`)
 
 ---
 
@@ -105,7 +91,7 @@ Sau đó bạn đã copy/đổi tên 1 bản GGUF ra ngoài:
 
 Script: `scripts/eval_public_test.py`
 
-### 5.1. Chạy full 6000 câu (adapter Unsloth)
+### 5.1. Chạy full
 
 ```bash
 python scripts/eval_public_test.py \
@@ -130,14 +116,8 @@ python scripts/eval_public_test.py \
   - `repetition_penalty=1.2`
   - `no_repeat_ngram_size=2`
   - `eos_token_id=tokenizer.eos_token_id`
-- Ghi ra:
-  - TSV: `results/public_test_predictions.tsv`
-  - JSON: `results/public_test_predictions.json`
-  - Log thời gian: `eval_public_test.log` (hoặc `eval_public_test_resume.log`)
 
 ### 5.2. Resume khi bị crash / timeout
-
-`eval_public_test.py` hỗ trợ:
 
 ```bash
 python scripts/eval_public_test.py \
@@ -148,8 +128,6 @@ python scripts/eval_public_test.py \
   --max-new-tokens 128 \
   --resume
 ```
-
-- `--resume`: đọc TSV/JSON hiện có, tiếp tục từ mẫu kế tiếp (không chạy lại từ đầu).
 
 ---
 
@@ -172,16 +150,11 @@ In ra:
 
 ## 7. Đồng bộ TSV ↔ JSON kết quả
 
-Để convert lại khi TSV thay đổi:
-
 Script: `scripts/tsv_to_json.py`
 
 ```bash
 python scripts/tsv_to_json.py results/public_test_predictions.tsv
 ```
-
-Tạo/ghi đè:
-- `results/public_test_predictions.json`
 
 ---
 
@@ -207,20 +180,11 @@ python scripts/run_fullbin_translate.py \
   --text "Bệnh nhân có tiền sử tăng huyết áp và hiện đang đau đầu dữ dội."
 ```
 
-Script sẽ:
-- Load model 16-bit bằng `AutoModelForCausalLM.from_pretrained`.
-- Prompt: `instruction + "Input:" + "Output:"`.
-- In ra phần sau `"Output:"` là bản dịch.
-
 ---
 
 ## 9. Chạy model full với Unsloth + FA2 (tối ưu GPU)
 
-Nếu muốn tận dụng FA2 + 4-bit cả với bản đã merge:
-
 Script: `scripts/run_unsloth_fullbin.py`
-
-### 9.1. EN → VI (4-bit + FA2)
 
 ```bash
 python scripts/run_unsloth_fullbin.py \
@@ -229,34 +193,11 @@ python scripts/run_unsloth_fullbin.py \
   --text "The patient has a severe headache and a history of hypertension."
 ```
 
-### 9.2. VI → EN
-
-```bash
-python scripts/run_unsloth_fullbin.py \
-  --model-dir final_models/Qwen2.5-7B-Medical-Full-Bin \
-  --direction vi-en \
-  --text "Bệnh nhân có tiền sử tăng huyết áp và hiện đang đau đầu dữ dội."
-```
-
-Nếu muốn load full 16-bit (không 4-bit):
-
-```bash
-python scripts/run_unsloth_fullbin.py \
-  --model-dir final_models/Qwen2.5-7B-Medical-Full-Bin \
-  --direction en-vi \
-  --text "The patient has a severe headache and a history of hypertension." \
-  --no-4bit
-```
-
 ---
 
-## 10. Dùng GGUF với Ollama / llama.cpp (tóm tắt)
+## 10. Dùng GGUF với Ollama / llama.cpp
 
 ### 10.1. llama.cpp
-
-- Model GGUF: `Qwen2.5-7B.Q4_K_M.gguf`
-
-Ví dụ chạy CLI:
 
 ```bash
 ./llama.cpp/llama-cli \
@@ -264,9 +205,9 @@ Ví dụ chạy CLI:
   -p "Translate the following English text to Vietnamese:\nInput: The patient has a severe headache.\nOutput:"
 ```
 
-### 10.2. Ollama (gợi ý)
+### 10.2. Ollama
 
-Tạo file `Modelfile` (ví dụ trong thư mục này):
+Tạo file `Modelfile`:
 
 ```text
 FROM ./Qwen2.5-7B.Q4_K_M.gguf
@@ -275,14 +216,10 @@ PARAMETER top_p 0.9
 TEMPLATE """{{ .Prompt }}"""
 ```
 
-Sau đó:
-
 ```bash
 ollama create qwen2.5-7b-medical -f Modelfile
 ollama run qwen2.5-7b-medical
 ```
-
-Rồi gõ prompt dịch với đúng format `instruction + Input + Output` như trên.
 
 ---
 
@@ -294,8 +231,5 @@ Rồi gõ prompt dịch với đúng format `instruction + Input + Output` như 
   - Khi inference, luôn gửi:  
     `{instruction}\nInput: {source}\nOutput:`
 - **FA2 chỉ bật khi dùng Unsloth** (`FastLanguageModel.from_pretrained`).
-- Với RTX 5060 Ti 16GB:
-  - Ưu tiên `load_in_4bit=True`, `bf16=True`, `packing=True`.
-  - `batch_size * gradient_accumulation_steps` ≈ 16 là hợp lý.
-
-
+- Ưu tiên `load_in_4bit=True`, `bf16=True`, `packing=True`.
+- `batch_size * gradient_accumulation_steps` ≈ 16 là hợp lý.
